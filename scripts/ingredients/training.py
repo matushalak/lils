@@ -24,6 +24,7 @@ if sys.path[0] != '../src':
 import training.loss as L
 from training.handlers import EarlyStopping, ModelCheckpoint, Tracer
 from training.optimizer import init_optimizer
+from device import resolve_device
 # from training.loss import init_metrics as _init_metrics
 
 
@@ -55,23 +56,31 @@ training = Ingredient('training')
 init_optimizer = training.capture(init_optimizer)
 
 
+def seed_worker(pid):
+    process_seed = torch.initial_seed()
+    base_seed = process_seed - pid
+
+    sequence_seeder = np.random.SeedSequence([pid, base_seed])
+    np.random.seed(sequence_seeder.generate_state(4))
+
+
 @training.capture
 def init_loader(dataset, batch_size, train_val_split=0.0,
-                rebalance_dataset=False, **loader_kwargs):
-    kwargs = {'shuffle': not rebalance_dataset, 'pin_memory': True,
-              'prefetch_factor': 2, 'num_workers': 4, 'persistent_workers': False}
+                rebalance_dataset=False, pin_memory=True, num_workers=4,
+                prefetch_factor=2, persistent_workers=False,
+                **loader_kwargs):
+    kwargs = {'shuffle': not rebalance_dataset, 'pin_memory': pin_memory,
+              'num_workers': num_workers}
     kwargs.update(**loader_kwargs)
 
-    num_workers = kwargs['num_workers']
+    if num_workers > 0:
+        kwargs.setdefault('prefetch_factor', prefetch_factor)
+        kwargs.setdefault('persistent_workers', persistent_workers)
+    else:
+        kwargs.pop('prefetch_factor', None)
+        kwargs.pop('persistent_workers', None)
 
-    def wif(pid):
-        process_seed = torch.initial_seed()
-        base_seed = process_seed - pid
-
-        sequence_seeder = np.random.SeedSequence([pid, base_seed])
-        np.random.seed(sequence_seeder.generate_state(4))
-
-    kwargs['pin_memory'] = kwargs['pin_memory'] and torch.cuda.is_available()
+    kwargs['pin_memory'] = kwargs['pin_memory'] and resolve_device().type == 'cuda'
 
     if train_val_split > 0.0:
         val_length = int(len(dataset) * train_val_split)
@@ -80,10 +89,10 @@ def init_loader(dataset, batch_size, train_val_split=0.0,
         train_data, val_data = random_split(dataset, lenghts)
 
         train_loader = DataLoader(train_data, batch_size, **kwargs,
-                                  worker_init_fn=(wif if num_workers > 1
+                                  worker_init_fn=(seed_worker if num_workers > 1
                                                   else None))
         val_loader = DataLoader(val_data, batch_size, **kwargs,
-                                worker_init_fn=(wif if num_workers > 1
+                                worker_init_fn=(seed_worker if num_workers > 1
                                                 else None))
 
         return train_loader, val_loader
@@ -92,7 +101,7 @@ def init_loader(dataset, batch_size, train_val_split=0.0,
     sampler = dataset.get_balanced_sampler('shape') if rebalance_dataset else None
 
     loader = DataLoader(dataset, batch_size, sampler=sampler, **kwargs,
-                        worker_init_fn=(wif if num_workers > 1 else None))
+                        worker_init_fn=(seed_worker if num_workers > 1 else None))
 
     return loader, loader
 

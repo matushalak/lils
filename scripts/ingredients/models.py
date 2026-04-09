@@ -100,7 +100,7 @@ def load_lgm(path, input_size, device):
     lgm = init_lgm(**architecture)
 
     with open(param_vals, 'rb') as f:
-        state_dict = torch.load(BytesIO(f.read()))
+        state_dict = torch.load(BytesIO(f.read()), map_location='cpu')
 
     lgm.load_state_dict(state_dict)
 
@@ -128,7 +128,7 @@ def load_predictor(path, img_size, n_factors, device):
                           n_targets=n_factors, **architecture)
 
     with open(param_vals, 'rb') as f:
-        state_dict = torch.load(BytesIO(f.read()))
+        state_dict = torch.load(BytesIO(f.read()), map_location='cpu')
 
     predictor.load_state_dict(state_dict)
 
@@ -162,12 +162,34 @@ def load_lgm_from_compnet(path, input_size, device):
     lgm = init_lgm(**architecture)
 
     with open(param_vals, 'rb') as f:
-        state_dict = torch.load(BytesIO(f.read()))
+        state_dict = torch.load(BytesIO(f.read()), map_location='cpu')
         state_dict = {k[4:]: state_dict[k] for k in state_dict
                                            if k.startswith('vae')}
     lgm.load_state_dict(state_dict)
 
     return lgm.to(device=device).eval()
+
+
+def load_compnet(path, input_size, n_actions, device):
+    meta = os.path.join(path, 'config.json')
+    param_vals = os.path.join(path, 'trained-model.pt')
+
+    with open(meta) as f:
+        architecture = json.load(f)['model']
+        composition_op = architecture.pop('composition_op')
+        latent_size = architecture['latent_size']
+        architecture['input_size'] = input_size
+
+    lgm = init_lgm(**architecture)
+    comp_op = comp_ops[composition_op](n_actions, latent_size)
+    compnet = CompositionNet(lgm, comp_op)
+
+    with open(param_vals, 'rb') as f:
+        state_dict = torch.load(BytesIO(f.read()), map_location='cpu')
+
+    compnet.load_state_dict(state_dict)
+
+    return compnet.to(device=device).eval()
 
 
 ################################ GT Decoders ##################################

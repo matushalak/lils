@@ -81,11 +81,9 @@ class Supervised(Wrapper):
             self._min_values = np.array(min_values)
             self._max_values = np.array(max_values)
 
-            def standarize(factor_values):
-                return ((factor_values - self._mean_values) /
-                         (self._max_values - self._min_values))
-
-            self.standarize = standarize
+    def standarize(self, factor_values):
+        return ((factor_values - self._mean_values) /
+                 (self._max_values - self._min_values))
 
     def __getitem__(self, idx):
         img = self.transform(self.imgs[idx])

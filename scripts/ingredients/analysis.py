@@ -20,6 +20,7 @@ if '../src' not in sys.path:
 from analysis.testing import infer
 from analysis.metrics import DAF
 from analysis.hinton import hinton
+from device import resolve_device
 
 
 torch.set_grad_enabled(False)
@@ -28,6 +29,14 @@ sns.set_style("white", {'axes.grid': False})
 plt.rcParams.update({'font.size': 11})
 
 analysis = Ingredient('analysis')
+
+
+def analysis_loader_defaults():
+    device = resolve_device()
+    return {
+        'num_workers': 4 if device.type == 'cuda' else 0,
+        'pin_memory': device.type == 'cuda',
+    }
 
 
 def create_r_squares(output_names):
@@ -137,7 +146,7 @@ def project_subspaces(train_data, test_data, model):
 
 @analysis.capture
 def model_score(model, data, metrics, model_name=None, device=None, *kwargs):
-    dataloader_args = {'batch_size': 120, 'num_workers': 4, 'pin_memory': True}
+    dataloader_args = {'batch_size': 120, **analysis_loader_defaults()}
     dataloader_args.update(kwargs)
 
     loader = DataLoader(data, **dataloader_args)
@@ -220,7 +229,7 @@ def plot_expected_test_dist(exp_mean, exp_std, n_samples, fig):
 @analysis.capture
 def get_recons(model, data, n_recons=10, loss='bce', **kwargs):
     dataloader_args = {'batch_size': n_recons, 'shuffle': True,
-                       'pin_memory': True}
+                       **analysis_loader_defaults()}
     dataloader_args.update(kwargs)
 
     inputs, targets = next(iter(DataLoader(data, **dataloader_args)))
@@ -278,8 +287,81 @@ def get_recons_plot(data, no_recon_labels=False, axes=None):
 
 
 @analysis.capture
+def get_comp_recons(model, data, n_recons=5, loss='bce', **kwargs):
+    dataloader_args = {'batch_size': n_recons, 'shuffle': True,
+                       **analysis_loader_defaults()}
+    dataloader_args.update(kwargs)
+
+    (input_imgs, actions), targets = next(iter(DataLoader(data, **dataloader_args)))
+
+    with torch.no_grad():
+        model.eval()
+        device = next(model.parameters()).device
+
+        recons = model((input_imgs.to(device=device), actions.to(device=device)))
+        if isinstance(recons, tuple):
+            recons = recons[0]
+
+        if loss == 'bce':
+            recons = recons.sigmoid()
+        else:
+            recons = recons.clamp(0, 1)
+
+        recons = recons.cpu()
+
+    return targets, recons
+
+
+@analysis.capture
+def get_comp_recons_plot(data, axes=None):
+    targets, recons = data
+
+    batch_size = len(targets)
+    row_labels = [
+        'orig input',
+        'orig recon',
+        'cmd input',
+        'cmd recon',
+        'transf target',
+        'transf pred',
+    ]
+
+    if axes is None:
+        fig, axes = plt.subplots(len(row_labels), batch_size,
+                                 figsize=(2 * batch_size, 12))
+    else:
+        fig = None
+
+    images = np.stack([
+        targets[:, 0].numpy(),
+        recons[:, 0].numpy(),
+        targets[:, 1].numpy(),
+        recons[:, 1].numpy(),
+        targets[:, 2].numpy(),
+        recons[:, 2].numpy(),
+    ])
+
+    for j, (examp_imgs, ylab) in enumerate(zip(images, row_labels)):
+        for i, img in enumerate(examp_imgs):
+            if np.prod(img.shape) == 3 * 64 * 64:
+                axes[j, i].imshow(img.reshape(3, 64, 64).transpose(1, 2, 0))
+            else:
+                axes[j, i].imshow(img.reshape(1, 64, 64).transpose(1, 2, 0),
+                                  cmap='Greys_r')
+
+    for ax in axes.reshape(-1):
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+
+    for row, label in enumerate(row_labels):
+        axes[row, 0].set_ylabel(label, fontsize=16)
+
+    return fig
+
+
+@analysis.capture
 def infer(model, data, **kwargs):
-    dataloader_args = {'batch_size': 128, 'num_workers': 4, 'pin_memory': True}
+    dataloader_args = {'batch_size': 128, **analysis_loader_defaults()}
     dataloader_args.update(kwargs)
 
     loader = DataLoader(data, **dataloader_args)

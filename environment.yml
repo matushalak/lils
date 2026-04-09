@@ -1,0 +1,28 @@
+name: lils
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - numpy>=1.24,<2
+  - scipy
+  - pandas
+  - scikit-learn
+  - scikit-image
+  - matplotlib
+  - seaborn
+  - pyyaml
+  - pillow
+  - h5py
+  - requests
+  - jupyterlab
+  - ipykernel
+  - tqdm
+  - setuptools<81
+  - sacred
+  - pytorch=2.5
+  - torchvision=0.20
+  - pytorch-ignite>=0.5,<0.6
+  - pip:
+      - ortools==9.10.4067

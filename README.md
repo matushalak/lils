@@ -38,10 +38,24 @@ Running these experiments requires (among others) the following libraries instal
 * [Matplotlib](https://matplotlib.org/): For plotting.
 * [Jupyter](https://jupyter.org/): To produce the plots.
 
-We recommend using the provided [environment configuration file](https://gist.github.com/miltonllera/e0a6ca7f3283b029d0e333730b0ce980) and intalling using:
+We recommend using the repo-local environment file and installing with:
 
 ```
-conda env create -f torchlab-env.yml
+mamba env create -f environment.yml
+mamba activate lils
+```
+
+To bootstrap the dSprites dataset into the expected location:
+
+```bash
+python scripts/setup/download_dsprites.py
+```
+
+To run a minimal dSprites smoke test that exercises both the disentanglement and
+composition experiment entrypoints:
+
+```bash
+bash scripts/tests/smoke_dsprites.sh
 ```
 
 ## Directory structure

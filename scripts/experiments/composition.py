@@ -20,6 +20,9 @@ import sys
 import numpy as np
 import torch
 from functools import partial
+from warnings_setup import silence_known_warnings
+
+silence_known_warnings()
 
 from sacred import Experiment, SETTINGS
 from sacred.utils import apply_backspaces_and_linefeeds
@@ -38,6 +41,7 @@ from ingredients.training import training, ModelCheckpoint, init_metrics, \
 
 import configs.training as train_params
 import configs.vaes as model_params
+from device import resolve_device
 
 if '../src' not in sys.path:
     sys.path.append('../src')
@@ -51,7 +55,8 @@ ex = Experiment(name='composition', ingredients=[dataset, model, training])
 ex.observers.append(FileStorageObserver.create('../data/sims/composition'))
 
 # General configs
-ex.add_config(no_cuda=False, save_folder='../data/temp/composition')
+ex.add_config(no_cuda=False, save_folder='../data/temp/composition',
+              epoch_length=None, validation_epoch_length=None)
 ex.add_package_dependency('torch', torch.__version__)
 
 # Required for ProgressBar to work properly
@@ -63,11 +68,9 @@ ex.captured_out_filter = apply_backspaces_and_linefeeds
 def set_seed_and_device(seed, no_cuda):
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if torch.cuda.is_available() and not no_cuda:
+    device = resolve_device(no_cuda)
+    if device.type == 'cuda':
         torch.cuda.manual_seed(seed)
-        device = torch.device('cuda')
-    else:
-        device = torch.device('cpu')
 
     return device
 
@@ -116,7 +119,7 @@ def show():
 
 # Run experiment
 @ex.automain
-def main(_config):
+def main(_config, epoch_length, validation_epoch_length):
     epochs = _config['training']['epochs']
 
     device = set_seed_and_device()
@@ -164,7 +167,10 @@ def main(_config):
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def validate(engine):
-        validator.run(val_loader, epoch_length=np.ceil(len(val_loader) * 0.2))
+        val_epoch_length = validation_epoch_length
+        if val_epoch_length is None:
+            val_epoch_length = np.ceil(len(val_loader) * 0.2)
+        validator.run(val_loader, epoch_length=val_epoch_length)
         validator.logger.info(metrics_string(validator.state.metrics))
 
     # import traceback
@@ -182,8 +188,7 @@ def main(_config):
         filename_prefix='disent_best_nll',
         score_function=score_fn,
         create_dir=True,
-        require_empty=False,
-        save_as_state_dict=True
+        require_empty=False
     )
     validator.add_event_handler(Events.COMPLETED, best_checkpoint,
                                 {'model': model})
@@ -194,14 +199,13 @@ def main(_config):
         filename_prefix='disent_interval',
         n_saved=epochs//10,
         create_dir=True,
-        require_empty=False,
-        save_as_state_dict=True
+        require_empty=False
     )
     trainer.add_event_handler(Events.EPOCH_COMPLETED(every=10),
                               periodic_checkpoint, {'model': model})
 
     # Run the training
-    trainer.run(train_loader, max_epochs=epochs)
+    trainer.run(train_loader, max_epochs=epochs, epoch_length=epoch_length)
     # Select best model
     model.load_state_dict(best_checkpoint.last_checkpoint_state)
 

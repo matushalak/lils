@@ -2,6 +2,9 @@ import sys
 import os
 import yaml
 from os import path
+from warnings_setup import silence_known_warnings
+
+silence_known_warnings()
 
 import pandas as pd
 import numpy as np
@@ -13,13 +16,16 @@ from ingredients.dataset import dataset, get_lazyloader
 from ingredients.training import training, init_metrics, init_loss, \
                                  mse_recons, bern_recons
 from ingredients.analysis import analysis, infer, model_score, get_recons, \
-                                 get_recons_plot, latent_rep_plot, \
+                                 get_recons_plot, get_comp_recons, \
+                                 get_comp_recons_plot, latent_rep_plot, \
                                  disentanglement_metric, get_factor_idxs, \
                                  create_r_squares, expected_test_dist, \
                                  plot_expected_test_dist, process_discrete, \
                                  project_subspaces
 
-from ingredients.models import load_lgm_from_compnet, load_lgm, load_predictor
+from ingredients.models import load_compnet, load_lgm_from_compnet, load_lgm, \
+                               load_predictor
+from device import resolve_device
 
 
 an = Experiment(name='analysis', ingredients=[analysis, dataset, training])
@@ -61,11 +67,9 @@ def is_generative(setting):
 def set_seed_and_device(seed, no_cuda):
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if torch.cuda.is_available() and not no_cuda:
+    device = resolve_device(no_cuda)
+    if device.type == 'cuda':
         torch.cuda.manual_seed(seed)
-        device = torch.device('cuda')
-    else:
-        device = torch.device('cpu')
 
     return device
 
@@ -77,6 +81,12 @@ def load_model(setting, dataset, model_folder, device):
         return load_predictor(model_folder, dataset.img_size,
                               dataset.n_factors, device)
     return load_lgm_from_compnet(model_folder, dataset.img_size, device)
+
+
+def load_comp_model(setting, dataset, model_folder, device):
+    if setting != 'composition':
+        return None
+    return load_compnet(model_folder, dataset.img_size, dataset.n_factors, device)
 
 
 @an.automain
@@ -123,6 +133,7 @@ def main(_config, model_id, exp_folder, score_model, plot_recons,
     # model = load_composer(model_folder, model_id, device)
     dataset = get_lazyloader(dataset, condition, variant, modifiers)
     model = load_model(setting, dataset, model_folder, device)
+    comp_model = load_comp_model(setting, dataset, model_folder, device)
 
     print('Done.')
 
@@ -186,6 +197,30 @@ def main(_config, model_id, exp_folder, score_model, plot_recons,
                                     'test_recons.png'), bbox_inches='tight')
 
             print('Done.')
+
+        if setting == 'composition':
+            print('Generating composition reconstruction examples for training data...')
+
+            train_comp_data = dataset.get_composition(train=True)
+            train_comp_recons = get_comp_recons(comp_model, train_comp_data, loss=loss)
+            train_comp_recons_fig = get_comp_recons_plot(train_comp_recons)
+            train_comp_recons_fig.savefig(path.join(results_folder,
+                                         'train_composition_recons.png'),
+                                         bbox_inches='tight')
+
+            print('Done.')
+
+            if test_data is not None:
+                print('Generating composition reconstruction examples for test data...')
+
+                test_comp_data = dataset.get_composition(train=False)
+                test_comp_recons = get_comp_recons(comp_model, test_comp_data, loss=loss)
+                test_comp_recons_fig = get_comp_recons_plot(test_comp_recons)
+                test_comp_recons_fig.savefig(path.join(results_folder,
+                                             'test_composition_recons.png'),
+                                             bbox_inches='tight')
+
+                print('Done.')
 
     if compute_disent or plot_latent_rep:
         print("Computing model outputs...")

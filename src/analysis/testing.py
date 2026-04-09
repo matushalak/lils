@@ -6,6 +6,20 @@ import torch
 import pandas as pd
 from ignite.engine import create_supervised_evaluator
 from torch.utils.data.dataloader import DataLoader
+import sys
+
+if '../scripts' not in sys.path:
+    sys.path.append('../scripts')
+
+from device import resolve_device
+
+
+def analysis_loader_defaults():
+    device = resolve_device()
+    return {
+        'num_workers': 4,
+        'pin_memory': device.type == 'cuda',
+    }
 
 
 def get_recons(model, data, loss='bce'):
@@ -38,7 +52,7 @@ def get_recons(model, data, loss='bce'):
 
 def model_scores(models, data, model_names, metric, device):
     scores = []
-    loader = DataLoader(data, batch_size=120, num_workers=8, pin_memory=True)
+    loader = DataLoader(data, batch_size=120, **analysis_loader_defaults())
     for m in models:
         engine = create_supervised_evaluator(m, metric, device)
         metrics = engine.run(loader).metrics
@@ -52,7 +66,7 @@ def model_scores(models, data, model_names, metric, device):
 
 
 def infer(model, data, **kwargs):
-    dataloader_args = {'batch_size': 120, 'num_workers': 4, 'pin_memory': True}
+    dataloader_args = {'batch_size': 120, **analysis_loader_defaults()}
     dataloader_args.update(kwargs)
 
     loader = DataLoader(data, **dataloader_args)

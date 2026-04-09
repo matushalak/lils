@@ -185,6 +185,9 @@ class DatasetLazyLoader:
     def get_reconstruction(self, train=True):
         return self.get_subset(data_wrappers.Reconstruction(self.dataset), train)
 
+    def get_composition(self, train=True):
+        return self.get_subset(tuple_datasets.TripletDataset(self.dataset), train)
+
     def get_subset(self, dataset, train=True):
         mask = self.partition_masks[~train]
 

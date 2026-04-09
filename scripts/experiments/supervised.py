@@ -7,6 +7,10 @@ import sys
 import numpy as np
 import torch
 from torch.utils.data import random_split
+from warnings_setup import silence_known_warnings
+
+silence_known_warnings()
+
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
 from ignite.engine import Events, create_supervised_evaluator, \
@@ -22,6 +26,7 @@ from ingredients.training import training, ModelCheckpoint, init_loss, \
 
 import configs.training as train_params
 import configs.feedforward as model_params
+from device import resolve_device
 
 if '../src' not in sys.path:
     sys.path.append('../src')
@@ -45,11 +50,9 @@ ex.add_package_dependency('torch', torch.__version__)
 def set_seed_and_device(seed, no_cuda):
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if torch.cuda.is_available() and not no_cuda:
+    device = resolve_device(no_cuda)
+    if device.type == 'cuda':
         torch.cuda.manual_seed(seed)
-        device = torch.device('cuda')
-    else:
-        device = torch.device('cpu')
 
     return device
 
@@ -132,8 +135,7 @@ def main(_config):
         filename_prefix='classification',
         score_function=score_fn,
         create_dir=True,
-        require_empty=False,
-        save_as_state_dict=True
+        require_empty=False
     )
     validator.add_event_handler(Events.COMPLETED, best_checkpoint,
                                 {'model': model})

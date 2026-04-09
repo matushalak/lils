@@ -15,6 +15,9 @@ import os
 import argparse
 import yaml
 from enum import Enum
+from warnings_setup import silence_known_warnings
+
+silence_known_warnings()
 
 import numpy as np
 import torch
@@ -34,13 +37,13 @@ from training.loss import get_metric
 from analysis.metrics import run_daf
 from analysis.hinton import plot_hinton_matrices
 from analysis.testing import get_recons, model_scores
+from device import resolve_device
 
 # Disable grad globally
 torch.set_grad_enabled(False)
 
 # Config options
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-device = torch.device(device)
+device = resolve_device()
 
 sns.set(color_codes=True)
 sns.set_style("white", {'axes.grid': False})
