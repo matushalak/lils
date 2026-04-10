@@ -1,6 +1,7 @@
-name: lils
+name: lils-gpu
 channels:
   - pytorch
+  - nvidia
   - conda-forge
 dependencies:
   - python=3.10
@@ -21,9 +22,9 @@ dependencies:
   - tqdm
   - setuptools<81
   - sacred
-  - pytorch=2.5
-  - torchvision=0.20
+  - pytorch::pytorch=2.5
+  - pytorch::pytorch-cuda=12.4
+  - pytorch::torchvision=0.20
   - pytorch-ignite>=0.5,<0.6
-  - accelerate  # Optimizes training including MPS on Apple Silicon
   - pip:
       - ortools==9.10.4067
